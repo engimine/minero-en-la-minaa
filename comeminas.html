@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minero en la Mina</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+    body {
+      font-family: 'Press Start 2P', cursive;
+      background-color: #1a1a1a;
+      color: #fff;
+    }
+    .game-container {
+      display: grid;
+      grid-template-columns: repeat(20, 20px);
+      grid-template-rows: repeat(20, 20px);
+      gap: 2px;
+      margin: 20px auto;
+      width: fit-content;
+      background: radial-gradient(circle, #222, #111);
+      border: 4px solid #444;
+      border-radius: 10px;
+      box-shadow: 0 0 10px #000;
+    }
+    .cell {
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #333;
+      border-radius: 3px;
+      transition: transform 0.1s ease;
+      animation: flicker 2s linear infinite;
+    }
+    .miner {
+      color: #ffcc00;
+      transform: scale(1.2);
+      animation: minerBlink 1s infinite;
+    }
+    .gem {
+      color: #00ff00;
+      animation: gemPulse 1s infinite;
+    }
+    .obstacle {
+      color: #ff0000;
+      animation: obstaclePulse 1.5s infinite;
+    }
+    .power-up {
+      color: #00ffff;
+      animation: powerUpSpin 2s linear infinite;
+    }
+    .shield {
+      color: #00ff00;
+      animation: shieldPulse 1s infinite;
+    }
+    .path {
+      background-color: #666;
+    }
+    @keyframes flicker {
+      0%, 50%, 100% { opacity: 1; }
+      25%, 75% { opacity: 0.8; }
+    }
+    @keyframes minerBlink {
+      0%, 50%, 100% { transform: scale(1.2); }
+      25%, 75% { transform: scale(1.1); }
+    }
+    @keyframes gemPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.2); }
+    }
+    @keyframes obstaclePulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+    @keyframes powerUpSpin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    @keyframes shieldPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+  </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen">
+  <div id="instructions" class="text-center mb-4">
+    <h1 class="text-4xl mb-4">Minero en la Mina</h1>
+    <p class="text-lg mb-2">Creado por <span class="text-yellow-400">MARÍA JESÚS PUERTA ÁNGULO</span>, Ing. de Minas</p>
+    <p class="text-lg mb-6">Contacto: <a href="mailto:mjpaupc@gmail.com" class="text-blue-400">mjpaupc@gmail.com</a></p>
+    <p>Instrucciones:</p>
+    <ul>
+      <li>Utiliza las flechas del teclado para mover al minero.</li>
+      <li>Recoge las gemas (💎) para obtener puntos.</li>
+      <li>Evita los obstáculos (💣, 🕳️, 🦇) que te persiguen o usa el escudo (🛡️).</li>
+      <li>Coge power-ups para obtener ventajas.</li>
+      <li>¡Intenta obtener la máxima puntuación posible!</li>
+    </ul>
+    <button id="startButton" class="bg-green-500 text-white px-6 py-2 rounded hover:bg-green-600">
+      Empezar Juego
+    </button>
+  </div>
+
+  <div id="game" class="game-container hidden"></div>
+
+  <!-- Puntuaciones y estadísticas -->
+  <div class="text-center hidden" id="gameStats">
+    <p class="text-xl">Puntuación: <span id="score">0</span></p>
+    <p class="text-xl">Puntuación Máxima: <span id="highScore">0</span></p>
+    <p class="text-xl">Nivel: <span id="level">1</span></p>
+    <p class="text-xl">Vidas: <span id="lives">3</span></p>
+    <p class="text-xl">Tiempo: <span id="timer">60</span>s</p>
+    <p class="text-xl">Escudo: <span id="shieldTime">0</span>s</p>
+  </div>
+
+  <!-- Efectos de sonido -->
+  <audio id="gemSound" src="https://assets.mixkit.co/sfx/preview/mixkit-coin-win-notification-1992.mp3"></audio>
+  <audio id="obstacleSound" src="https://assets.mixkit.co/sfx/preview/mixkit-explosion-woosh-1535.mp3"></audio>
+  <audio id="levelUpSound" src="https://assets.mixkit.co/sfx/preview/mixkit-achievement-bell-600.mp3"></audio>
+  <audio id="powerUpSound" src="https://assets.mixkit.co/sfx/preview/mixkit-power-up-electricity-2580.mp3"></audio>
+  <audio id="magnetSound" src="https://assets.mixkit.co/sfx/preview/mixkit-magnetic-attract-1216.mp3"></audio>
+  <audio id="bombSound" src="https://assets.mixkit.co/sfx/preview/mixkit-bomb-explosion-995.mp3"></audio>
+
+  <script>
+    const gameContainer = document.getElementById("game");
+    const scoreDisplay = document.getElementById("score");
+    const highScoreDisplay = document.getElementById("highScore");
+    const levelDisplay = document.getElementById("level");
+    const livesDisplay = document.getElementById("lives");
+    const timerDisplay = document.getElementById("timer");
+    const shieldTimeDisplay = document.getElementById("shieldTime");
+    const startButton = document.getElementById("startButton");
+    const instructions = document.getElementById("instructions");
+    const gameStats = document.getElementById("gameStats");
+
+    const gemSound = document.getElementById("gemSound");
+    const obstacleSound = document.getElementById("obstacleSound");
+    const levelUpSound = document.getElementById("levelUpSound");
+    const powerUpSound = document.getElementById("powerUpSound");
+    const magnetSound = document.getElementById("magnetSound");
+    const bombSound = document.getElementById("bombSound");
+
+    let minerPosition = { x: 10, y: 10 };
+    let gemsCollected = 0;
+    let level = 1;
+    let lives = 3;
+    let timeLeft = 60;
+    let shieldTime = 0;
+    let obstacles = [];
+    let powerUps = [];
+    let gameInterval;
+    let timerInterval;
+    let obstacleMoveInterval;
+
+    // Cargar puntuación máxima desde el almacenamiento local
+    let highScore = localStorage.getItem("highScore") || 0;
+    highScoreDisplay.textContent = highScore;
+
+    // Generar el tablero del juego
+    function generateGame() {
+      gameContainer.innerHTML = "";
+      for (let y = 0; y < 20; y++) {
+        for (let x = 0; x < 20; x++) {
+          const cell = document.createElement("div");
+          cell.classList.add("cell");
+          cell.id = `cell-${x}-${y}`;
+          gameContainer.appendChild(cell);
+        }
+      }
+    }
+
+    // Colocar al minero en el tablero
+    function placeMiner() {
+      const minerCell = document.getElementById(`cell-${minerPosition.x}-${minerPosition.y}`);
+      minerCell.innerHTML = "👷";
+      minerCell.classList.add("miner");
+    }
+
+    // Colocar gemas en el tablero
+    function placeGems() {
+      for (let i = 0; i < 10; i++) { // Ajusta el número de gemas según sea necesario
+        let x, y;
+        do {
+          x = Math.floor(Math.random() * 20);
+          y = Math.floor(Math.random() * 20);
+        } while (x === minerPosition.x && y === minerPosition.y || obstacles.some(obs => obs.x === x && obs.y === y) || powerUps.some(pu => pu.x === x && pu.y === y));
+        const gemCell = document.getElementById(`cell-${x}-${y}`);
+        gemCell.innerHTML = "💎";
+        gemCell.classList.add("gem");
+      }
+    }
+
+    // Colocar obstáculos en el tablero
+    function placeObstacles() {
+      obstacles = [];
+      const obstacleTypes = ["💣", "🕳️", "🦇"];
+      for (let i = 0; i < level * 5; i++) { // Ajusta la cantidad de obstáculos según el nivel
+        let x, y;
+        do {
+          x = Math.floor(Math.random() * 20);
+          y = Math.floor(Math.random() * 20);
+        } while (x === minerPosition.x && y === minerPosition.y);
+        const type = obstacleTypes[Math.floor(Math.random() * obstacleTypes.length)];
+        obstacles.push({ x, y, type });
+        const obstacleCell = document.getElementById(`cell-${x}-${y}`);
+        obstacleCell.innerHTML = type;
+        obstacleCell.classList.add("obstacle");
+      }
+    }
+
+    // Mover obstáculos hacia el minero
+    function moveObstacles() {
+      obstacles.forEach(obstacle => {
+        const oldCell = document.getElementById(`cell-${obstacle.x}-${obstacle.y}`);
+        oldCell.innerHTML = "";
+        oldCell.classList.remove("obstacle");
+
+        const minerX = minerPosition.x;
+        const minerY = minerPosition.y;
+        const ox = obstacle.x;
+        const oy = obstacle.y;
+
+        let newX = ox;
+        let newY = oy;
+
+        // Determinar la dirección hacia el minero
+        if (ox < minerX) {
+          newX++;
+        } else if (ox > minerX) {
+          newX--;
+        }
+
+        if (oy < minerY) {
+          newY++;
+        } else if (oy > minerY) {
+          newY--;
+        }
+
+        // Verificar si la nueva posición está dentro de los límites y no está ocupada por otro obstáculo
+        if (newX >= 0 && newX < 20 && newY >= 0 && newY < 20 && !obstacles.some(o => o.x === newX && o.y === newY)) {
+          obstacle.x = newX;
+          obstacle.y = newY;
+        } else {
+          // Si no se puede mover hacia el minero, elegir una dirección aleatoria disponible
+          const directions = [];
+          if (ox > 0 && !obstacles.some(o => o.x === ox - 1 && o.y === oy)) directions.push({x: -1, y: 0});
+          if (ox < 19 && !obstacles.some(o => o.x === ox + 1 && o.y === oy)) directions.push({x: 1, y: 0});
+          if (oy > 0 && !obstacles.some(o => o.x === ox && o.y === oy - 1)) directions.push({x: 0, y: -1});
+          if (oy < 19 && !obstacles.some(o => o.x === ox && o.y === oy + 1)) directions.push({x: 0, y: 1});
+
+          if (directions.length > 0) {
+            const move = directions[Math.floor(Math.random() * directions.length)];
+            obstacle.x += move.x;
+            obstacle.y += move.y;
+          }
+        }
+
+        const newCell = document.getElementById(`cell-${obstacle.x}-${obstacle.y}`);
+        newCell.innerHTML = obstacle.type;
+        newCell.classList.add("obstacle");
+      });
+    }
+
+    // Colocar power-ups en el tablero
+    function placePowerUps() {
+      powerUps = [];
+      const powerUpTypes = ["⚡", "❤️", "🛡️", "🧲", "💣"];
+      for (let i = 0; i < 4; i++) { // Ajusta la cantidad de power-ups según sea necesario
+        let x, y;
+        do {
+          x = Math.floor(Math.random() * 20);
+          y = Math.floor(Math.random() * 20);
+        } while (x === minerPosition.x && y === minerPosition.y || obstacles.some(obs => obs.x === x && obs.y === y));
+        const type = powerUpTypes[Math.floor(Math.random() * powerUpTypes.length)];
+        powerUps.push({ x, y, type });
+        const powerUpCell = document.getElementById(`cell-${x}-${y}`);
+        powerUpCell.innerHTML = type;
+        powerUpCell.classList.add("power-up");
+      }
+    }
+
+    // Mover al minero
+    function moveMiner(event) {
+      const key = event.key;
+      let newX = minerPosition.x;
+      let newY = minerPosition.y;
+
+      if (key === "ArrowUp" && minerPosition.y > 0) newY--;
+      if (key === "ArrowDown" && minerPosition.y < 19) newY++;
+      if (key === "ArrowLeft" && minerPosition.x > 0) newX--;
+      if (key === "ArrowRight" && minerPosition.x < 19) newX++;
+
+      const newCell = document.getElementById(`cell-${newX}-${newY}`);
+      if (newCell.innerHTML === "💎") {
+        gemsCollected++;
+        scoreDisplay.textContent = gemsCollected;
+        gemSound.play();
+        if (gemsCollected % 5 === 0) {
+          level++;
+          levelDisplay.textContent = level;
+          levelUpSound.play();
+          startGame();
+        }
+      } else if (newCell.innerHTML === "⚡") {
+        powerUpSound.play();
+        // Aumentar velocidad temporalmente (no implementado aquí)
+      } else if (newCell.innerHTML === "❤️") {
+        powerUpSound.play();
+        lives++;
+        livesDisplay.textContent = lives;
+      } else if (newCell.innerHTML === "🛡️") {
+        powerUpSound.play();
+        shieldTime = 10; // Escudo durante 10 segundos
+        shieldTimeDisplay.textContent = shieldTime;
+      } else if (newCell.innerHTML === "🧲") {
+        magnetSound.play();
+        // Activar efecto de magnetismo (no implementado aquí)
+      } else if (newCell.innerHTML === "💣") {
+        bombSound.play();
+        // Activar efecto de bomba (no implementado aquí)
+      } else if (["💣", "🕳️", "🦇"].includes(newCell.innerHTML)) {
+        if (shieldTime === 0) {
+          lives--;
+          livesDisplay.textContent = lives;
+          obstacleSound.play();
+          if (lives === 0) {
+            endGame();
+            return;
+          }
+        }
+      }
+
+      // Limpiar posición anterior y marcar el camino
+      const oldCell = document.getElementById(`cell-${minerPosition.x}-${minerPosition.y}`);
+      oldCell.innerHTML = "";
+      oldCell.classList.remove("miner");
+      if (oldCell.innerHTML === "") {
+        oldCell.classList.add("path");
+      }
+
+      // Actualizar posición
+      minerPosition.x = newX;
+      minerPosition.y = newY;
+      placeMiner();
+    }
+
+    // Temporizador
+    function startTimer() {
+      timerInterval = setInterval(() => {
+        timeLeft--;
+        timerDisplay.textContent = timeLeft;
+        if (timeLeft === 0) {
+          endGame();
+        }
+      }, 1000);
+    }
+
+    // Temporizador del escudo
+    function startShieldTimer() {
+      const shieldInterval = setInterval(() => {
+        if (shieldTime > 0) {
+          shieldTime--;
+          shieldTimeDisplay.textContent = shieldTime;
+        } else {
+          clearInterval(shieldInterval);
+        }
+      }, 1000);
+    }
+
+    // Finalizar el juego
+    function endGame() {
+      clearInterval(gameInterval);
+      clearInterval(timerInterval);
+      clearInterval(obstacleMoveInterval);
+      alert(`¡Game Over! Puntuación: ${gemsCollected}`);
+      if (gemsCollected > highScore) {
+        highScore = gemsCollected;
+        localStorage.setItem("highScore", highScore);
+        highScoreDisplay.textContent = highScore;
+      }
+      resetGame();
+    }
+
+    // Reiniciar el juego
+    function resetGame() {
+      gemsCollected = 0;
+      level = 1;
+      lives = 3;
+      timeLeft = 60;
+      shieldTime = 0;
+      scoreDisplay.textContent = "0";
+      levelDisplay.textContent = "1";
+      livesDisplay.textContent = "3";
+      timerDisplay.textContent = "60";
+      shieldTimeDisplay.textContent = "0";
+      instructions.classList.remove("hidden");
+      gameContainer.classList.add("hidden");
+      gameStats.classList.add("hidden");
+      document.removeEventListener("keydown", moveMiner);
+    }
+
+    // Iniciar el juego
+    function startGame() {
+      generateGame();
+      placeMiner();
+      placeGems();
+      placeObstacles();
+      placePowerUps();
+      gameContainer.classList.remove("hidden");
+      gameStats.classList.remove("hidden");
+      document.addEventListener("keydown", moveMiner);
+      startTimer();
+      startShieldTimer();
+      const obstacleMoveDelay = Math.max(200, 1000 - level * 100);
+      obstacleMoveInterval = setInterval(moveObstacles, obstacleMoveDelay);
+    }
+
+    // Evento para empezar el juego
+    startButton.addEventListener("click", () => {
+      instructions.classList.add("hidden");
+      startGame();
+    });
+  </script>
+</body>
+</html>
